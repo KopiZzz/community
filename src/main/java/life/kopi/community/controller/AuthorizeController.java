@@ -2,12 +2,20 @@ package life.kopi.community.controller;
 
 import life.kopi.community.dto.AccessTokenDto;
 import life.kopi.community.dto.GithubUser;
+import life.kopi.community.mapper.UserMapper;
+import life.kopi.community.model.User;
 import life.kopi.community.provider.GithubProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
+import org.springframework.stereotype.Repository;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+
+import javax.annotation.Resource;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import java.util.UUID;
 
 /**
  * 获取code
@@ -18,6 +26,7 @@ public class AuthorizeController {
     @Autowired
     private GithubProvider githubProvider;
 
+
     @Value("${github.client.id}")
     private String ClientId;
 
@@ -26,9 +35,16 @@ public class AuthorizeController {
 
     @Value("${github.redirect.uri}")
     private String RedirectUri;
+
+    //注入mapper
+    @Autowired
+    //@Resource
+    private UserMapper userMapper;
+
     @GetMapping("/callback")
     public String callback(@RequestParam(name = "code") String code,
-                           @RequestParam(name = "state") String state){
+                           @RequestParam(name = "state") String state,
+                           HttpServletRequest request) {
         AccessTokenDto accessTokenDto = new AccessTokenDto();
         accessTokenDto.setCode(code);
         accessTokenDto.setClient_id(ClientId);
@@ -36,9 +52,24 @@ public class AuthorizeController {
         accessTokenDto.setRedirect_uri(RedirectUri);
         accessTokenDto.setState(state);
         String accessToken = githubProvider.getAccessToken(accessTokenDto);
-        GithubUser user = githubProvider.getUser(accessToken);
-        System.out.println(user.getName());
+        GithubUser githubUser = githubProvider.getUser(accessToken);
+        if(githubUser != null){
+            User user =new User();
+            user.setToken(UUID.randomUUID().toString());
+            user.setName(githubUser.getName());
+            user.setAccountId(String.valueOf(githubUser.getId()));
+            user.setGmtCreate(System.currentTimeMillis());
+            user.setGmtModified(user.getGmtCreate());
+            userMapper.insert(user);
+            //登录成功 写入session和cookies
+            request.getSession().setAttribute("user",githubUser);
+            return "redirect:/";
+        }else{
+            //登录失败
+            return "redirect:/";
+        }
 
-        return "index";
+
+
     }
 }
